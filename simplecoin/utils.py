@@ -407,6 +407,8 @@ def collect_user_stats(user_address):
     currency = dict(
         immature=dec(0),
         unconverted=dec(0),
+        sold=dec(0),
+        btc_converted=dec(0),
         payable=dec(0),
         total_pending=dec(0),
     )
@@ -436,7 +438,7 @@ def collect_user_stats(user_address):
                filter(
                    ((Block.orphan == True) & (Block.found_at >= lower_day))
                    | (Block.orphan != True)).
-               order_by(Credit.id.desc())).limit(20).all()
+               order_by(Credit.id.desc())).all()
 
     for credit in credits:
         # By desired currency
@@ -446,7 +448,11 @@ def collect_user_stats(user_address):
         curr['convert'] = credit.block.currency != credit.currency
         if credit.type == 1:  # CreditExchange
             if not credit.payable and not credit.block.orphan:
-                curr['unconverted'] += credit.amount
+                if credit.sell_amount is not None:
+                    curr['sold'] += credit.amount
+                    curr['btc_converted'] += credit.sell_amount
+                else:
+                    curr['unconverted'] += credit.amount
 
         if credit.payable:
             curr['payable'] += credit.payable_amount
@@ -610,7 +616,7 @@ def validate_message_vals(address, **kwargs):
     # Make sure we have both an arb donate addr + an arb donate % or neither
     if not del_spayout_addr:
         if not spayout_perc >= 0 or spayout_addr is False:
-            raise CommandException("Split payout requires both an address"
+            raise CommandException("Split payout requires both an address "
                                    "and a percentage, or to remove it both "
                                    "must be removed.")
     elif del_spayout_addr:
