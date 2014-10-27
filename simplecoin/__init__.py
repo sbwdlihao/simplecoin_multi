@@ -225,13 +225,13 @@ def create_app(mode, configs=None, log_level=None, **kwargs):
                                second=35)
             # every minute at 55 seconds after the minute
             sched.add_cron_job(sch.generate_credits, second=55)
-            sched.add_cron_job(sch.create_trade_req, args=("sell",), minute=1,
-                               hour="0,6,12,18")
-            sched.add_cron_job(sch.create_trade_req, args=("buy",), minute=1,
-                               hour="0,6,12,18")
+            # sched.add_cron_job(sch.create_trade_req, args=("sell",), minute=1,
+            #                    hour="0,6,12,18")
+            # sched.add_cron_job(sch.create_trade_req, args=("buy",), minute=1,
+            #                    hour="0,6,12,18")
             # every minute at 55 seconds after the minute
             sched.add_cron_job(sch.collect_minutes, second=35)
-            sched.add_cron_job(sch.collect_ppagent_data, second=40)
+            # sched.add_cron_job(sch.collect_ppagent_data, second=40)
             # every five minutes 20 seconds after the minute
             sched.add_cron_job(sch.compress_minute,
                                minute='0,5,10,15,20,25,30,35,40,45,50,55',
@@ -241,7 +241,7 @@ def create_app(mode, configs=None, log_level=None, **kwargs):
             # every minute 2 seconds after the minute
             sched.add_cron_job(sch.update_block_state, second=2)
             # every day
-            sched.add_cron_job(sch.update_block_state, hour=0, second=0, minute=3)
+            sched.add_cron_job(sch.create_payouts, hour=0, second=0, minute=3)
         else:
             app.logger.info("Stage mode has been set in the configuration, not "
                             "running scheduled database altering cron tasks")
