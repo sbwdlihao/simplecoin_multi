@@ -81,6 +81,7 @@ def create_app(mode, configs=None, log_level=None, **kwargs):
     # Initialize our flask application
     # =======================================================================
     app = Flask(__name__, static_folder='../static', static_url_path='/static')
+    app.config['BABEL_DEFAULT_LOCALE'] = 'zh_Hans_CN'
     app.jinja_loader = FileSystemLoader(os.path.join(root, 'templates'))
     babel = Babel(app)
 
