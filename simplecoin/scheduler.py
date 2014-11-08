@@ -17,7 +17,7 @@ from simplecoin.utils import last_block_time, anon_users, time_format
 from simplecoin.exceptions import RemoteException, InvalidAddressException
 from simplecoin.models import (Block, Credit, UserSettings, TradeRequest,
                                CreditExchange, Payout, ShareSlice, ChainPayout,
-                               DeviceSlice, make_upper_lower)
+                               DeviceSlice, AnalysisSlice, make_upper_lower)
 
 from decimal import Decimal
 from flask import current_app
@@ -870,6 +870,37 @@ def collect_minutes():
                 db.session.commit()
         redis_conn.delete("processing_shares")
 
+    unproc_mins = redis_conn.keys("analysis_min_*")
+    for key in unproc_mins:
+        current_app.logger.info("Processing analysis key {}".format(key))
+        currency, algo, address, worker, stamp = key.split("_")[2:]
+        minute = datetime.datetime.utcfromtimestamp(float(stamp))
+        # To ensure invalid stampt don't get committed
+        minute = AnalysisSlice.floor_time(minute, 0)
+        if stamp < (time.time() - 30):
+            current_app.logger.info("Skipping timestamp {}, too young"
+                                    .format(minute))
+            continue
+
+        redis_conn.rename(key, "processing_analysis_shares")
+        data = redis_conn.hgetall("processing_analysis_shares")
+        total = data['total']
+        theory = data['theory']
+        real = data['real']
+        try:
+            slc = AnalysisSlice(time=minute, currency=currency, algo=algo, user=address, worker=worker,
+                             total=total, theory=theory, real=real, span=0)
+            db.session.add(slc)
+            db.session.commit()
+        except sqlalchemy.exc.IntegrityError:
+            db.session.rollback()
+            slc = AnalysisSlice.query.with_lockmode('update').filter_by(
+                time=minute, currency=currency, algo=algo, user=address, worker=worker).one()
+            slc.total += total
+            slc.theory += theory
+            slc.real += real
+            db.session.commit()
+        redis_conn.delete("processing_analysis_shares")
 
 @crontab
 @SchedulerCommand.command
@@ -980,6 +1011,7 @@ def compress_slices():
 def compress_minute():
     ShareSlice.compress(0)
     DeviceSlice.compress(0)
+    AnalysisSlice.compress(0)
     db.session.commit()
 
 
@@ -988,6 +1020,7 @@ def compress_minute():
 def compress_five_minute():
     ShareSlice.compress(1)
     DeviceSlice.compress(1)
+    AnalysisSlice.compress(1)
     db.session.commit()
 
 

@@ -37,6 +37,23 @@ def init_db(emit=False):
         db.create_all()
         stamp()
 
+@manager.option('-e', '--emit', help='prints the SQL that is executed',
+                action="store_true")
+def recreate_db(emit=False):
+    """ Resets entire database to empty state """
+    if emit:
+        import logging
+        logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
+
+    res = raw_input("You shouldn't probably ever do this in production! Are you"
+                    " really, really sure you want to recreate all DB {}? [y/n] "
+                    .format(db.engine))
+    if res != "y":
+        return
+    else:
+        db.session.commit()
+        db.create_all()
+        stamp()
 
 @manager.command
 def list_donation_perc():

@@ -581,6 +581,27 @@ class TimeSlice(object):
         return datetime.utcfromtimestamp(time)
 
     @classmethod
+    def create_upper(cls, items, current_slice, upper_span, delete=True):
+        # add a time slice for each user in this pending period
+        for key, slices in items.iteritems():
+            # Allows us to use different combining methods. Ie averaging or
+            # adding
+            new_val = cls.combine(*[slc.value for slc in slices])
+
+            # put it in the database
+            upper = cls.query.filter_by(time=current_slice, span=upper_span, **key._asdict()).with_lockmode('update').first()
+            # wasn't in the db? create it
+            if not upper:
+                upper = cls(time=current_slice, value=new_val, span=upper_span, **key._asdict())
+                db.session.add(upper)
+            else:
+                upper.value = cls.combine(upper.value, new_val)
+
+            if delete:
+                for slc in slices:
+                    db.session.delete(slc)
+
+    @classmethod
     def compress(cls, span, delete=True):
         # If we're trying to compress the largest slice boundary
         if span == len(cls.span_config) - 1:
@@ -595,26 +616,6 @@ class TimeSlice(object):
         # dictionary of lists keyed by item_hash
         items = {}
 
-        def create_upper():
-            # add a time slice for each user in this pending period
-            for key, slices in items.iteritems():
-                # Allows us to use different combining methods. Ie averaging or
-                # adding
-                new_val = cls.combine(*[slc.value for slc in slices])
-
-                # put it in the database
-                upper = cls.query.filter_by(time=current_slice, span=upper_span, **key._asdict()).with_lockmode('update').first()
-                # wasn't in the db? create it
-                if not upper:
-                    upper = cls(time=current_slice, value=new_val, span=upper_span, **key._asdict())
-                    db.session.add(upper)
-                else:
-                    upper.value = cls.combine(upper.value, new_val)
-
-                if delete:
-                    for slc in slices:
-                        db.session.delete(slc)
-
         # traverse minute shares that are old enough in time order
         for slc in cls.query.filter(cls.time < recent).filter_by(span=span).order_by(cls.time):
             slice_time = cls.floor_time(slc.time, upper_span)
@@ -625,7 +626,7 @@ class TimeSlice(object):
             # we've encountered the next time slice, so commit the pending one
             if slice_time != current_slice:
                 logging.debug("Processing slice " + str(current_slice))
-                create_upper()
+                cls.create_upper(items, current_slice, upper_span, delete)
                 items.clear()
                 current_slice = slice_time
 
@@ -635,7 +636,7 @@ class TimeSlice(object):
             items.setdefault(key, [])
             items[key].append(slc)
 
-        create_upper()
+        cls.create_upper(items, current_slice, upper_span, delete)
 
     @classmethod
     def get_span(cls, lower=None, upper=None, stamp=False, ret_query=False,
@@ -749,6 +750,48 @@ class DeviceSlice(TimeSlice, base):
                    dict(window=timedelta(days=1), slice=timedelta(minutes=5)),
                    dict(window=timedelta(days=30), slice=timedelta(hours=1))]
 
+class AnalysisSlice(TimeSlice, base):
+    time = db.Column(db.DateTime, primary_key=True)
+    currency = db.Column(db.String, primary_key=True)
+    algo = db.Column(db.String, primary_key=True)
+    user = db.Column(db.String, primary_key=True)
+    worker = db.Column(db.String, primary_key=True)
+    span = db.Column(db.SmallInteger, nullable=False)
+    total = db.Column(db.Float)
+    theory = db.Column(db.Float)
+    real = db.Column(db.Float)
+
+    combine = sum_combine
+    keys = ['currency', 'algo', 'user', 'worker']
+    key = namedtuple('Key', keys)
+    span_config = [dict(window=timedelta(hours=1), slice=timedelta(minutes=1)),
+                   dict(window=timedelta(days=1), slice=timedelta(minutes=5)),
+                   dict(window=timedelta(days=30), slice=timedelta(hours=1))]
+
+    @classmethod
+    def create_upper(cls, items, current_slice, upper_span, delete=True):
+        # add a time slice for each user in this pending period
+        for key, slices in items.iteritems():
+            # Allows us to use different combining methods. Ie averaging or
+            # adding
+            new_total = cls.combine(*[slc.total for slc in slices])
+            new_theory = cls.combine(*[slc.theory for slc in slices])
+            new_real = cls.combine(*[slc.real for slc in slices])
+
+            # put it in the database
+            upper = cls.query.filter_by(time=current_slice, span=upper_span, **key._asdict()).with_lockmode('update').first()
+            # wasn't in the db? create it
+            if not upper:
+                upper = cls(time=current_slice, total=new_total, theory=new_theory, real=new_real, span=upper_span, **key._asdict())
+                db.session.add(upper)
+            else:
+                upper.total = cls.combine(upper.total, new_total)
+                upper.theory = cls.combine(upper.theory, new_theory)
+                upper.real = cls.combine(upper.real, new_real)
+
+            if delete:
+                for slc in slices:
+                    db.session.delete(slc)
 
 ################################################################################
 # User account related objects
