@@ -21,12 +21,12 @@ charge_autoex_fees = false
 
 # i18n/localisation configuration
 # =======================================================================
-default_locale = "en"
+default_locale = "zh_Hans_CN"
 
 # acceptable locales that we have translations for
 [available_locales]
 en = "English"
-# zh_Hans_CN = "\u5B98\u8A71"
+zh_Hans_CN = "\u4e2d\u6587"
 # ja = "\u65E5\u672C\u8A9E"
 
 
@@ -192,6 +192,11 @@ algo = "scryptn"
 address_version = [82]
 block_time = 150
 
+[currencies.MLS]
+name = "Mozzshare"
+algo = "hvc"
+address_version = [50]
+block_time = 120
 
 [algos.x11]
 hashes_per_share = 4294967296
@@ -207,6 +212,11 @@ display = "Scrypt-N"
 hashes_per_share = 65536
 normalize_mult = 1
 display = "Scrypt"
+
+[algos.hvc]
+hashes_per_share = 65536
+normalize_mult = 1
+display = "Hefty1"
 
 [[navbar.left_nav]]
 title = "Home"
