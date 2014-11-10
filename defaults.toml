@@ -196,7 +196,7 @@ block_time = 150
 name = "Mozzshare"
 algo = "hvc"
 address_version = [50]
-block_time = 120
+block_time = 60
 
 [algos.x11]
 hashes_per_share = 4294967296
@@ -214,8 +214,8 @@ normalize_mult = 1
 display = "Scrypt"
 
 [algos.hvc]
-hashes_per_share = 65536
-normalize_mult = 1
+hashes_per_share = 4294967296
+normalize_mult = 5.0342
 display = "Hefty1"
 
 [[navbar.left_nav]]
