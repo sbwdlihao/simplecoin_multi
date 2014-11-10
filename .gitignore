@@ -46,7 +46,7 @@ pip-log.txt
 nosetests.xml
 
 # Translations
-*.mo
+# *.mo
 
 # Mr Developer
 .mr.developer.cfg
@@ -56,3 +56,5 @@ nosetests.xml
 .sass-cache
 tags
 celerybeat-schedule
+
+doc/_build/
