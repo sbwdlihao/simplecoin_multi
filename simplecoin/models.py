@@ -1,6 +1,8 @@
 import calendar
 from decimal import Decimal
+import decimal
 import logging
+import cPickle
 
 from collections import namedtuple
 from datetime import datetime, timedelta
@@ -152,6 +154,15 @@ class ChainPayout(base):
     def config_obj(self):
         return chains[self.chainid]
 
+    @property
+    def hashes(self):
+        hps = current_app.algos[self.block.algo].hashes_per_share
+        return hps * self.chain_shares
+
+    @property
+    def mhashes(self):
+        return self.hashes / 1000000
+
     def make_credit_obj(self, user, address, currency, shares):
         """ Makes the appropriate credit object given a few details. Payout
         amount too be calculated. """
@@ -237,17 +248,26 @@ class Block(base):
 
     @property
     def contributed(self):
-        # Total fees + donations associated with this block
+        """ Total fees + donations associated with this block """
         return sum([(bp.donations + bp.fees) for bp in self.chain_payouts]) or 0
 
     @property
-    def shares_to_solve(self):
-        # Total shares that were required to solve the block
-        return sum([bp.chain_shares for bp in self.chain_payouts])
+    def average_hashrate(self):
+        t = self.duration.total_seconds()
+        if not t:
+            return 0.0
+        return (float(sum([bp.chain_shares for bp in self.chain_payouts])) *
+                float(self.currency_obj.algo.hashes_per_share) / t)
 
     @property
-    def hr_shares_to_solve(self):
-        return float(self.shares_to_solve)
+    def hashes_to_solve(self):
+        return (sum([bp.chain_shares for bp in self.chain_payouts]) *
+                self.currency_obj.algo.hashes_per_share)
+
+    @property
+    def shares_to_solve(self):
+        """ Total shares that were required to solve the block """
+        return sum([bp.chain_shares for bp in self.chain_payouts])
 
     @property
     def status(self):
@@ -269,7 +289,7 @@ class Block(base):
     @property
     def luck(self):
         hps = current_app.algos[self.algo].hashes_per_share
-        return ((self.difficulty * (2 ** 32)) / ((float(self.hr_shares_to_solve) or 1) * hps)) * 100
+        return ((self.difficulty * (2 ** 32)) / ((float(self.shares_to_solve) or 1) * hps)) * 100
 
     @property
     def timestamp(self):
@@ -289,6 +309,69 @@ class Block(base):
                     self.currency_obj.block_mature_confirms -
                     data['height'])
         return None
+
+    def chain_distrib(self):
+        chain_data = {}
+        total = 0
+        for chain_payout in self.chain_payouts:
+            total += chain_payout.chain_shares
+            chain_data.setdefault(chain_payout.config_obj, [chain_payout.chain_shares, 0])
+
+        for data in chain_data.itervalues():
+            data[1] = data[0] / total * 100
+
+        return chain_data
+
+    def chain_profitability(self):
+        """ Creates a dictionary that is keyed by chainid to represent the BTC
+        earned per number of shares for every share chain that helped solve
+        this block """
+        # Get a some credit totals
+        chain_data = cache.cache._client.get(
+            "chain_profitability_{}".format(self.hash))
+        if chain_data:
+            chain_data = cPickle.loads(chain_data)
+            return chain_data
+
+        uncacheable = False
+        chain_data = {}
+        for chain_payout in self.chain_payouts:
+            chain = chain_data.setdefault(
+                chain_payout.chainid,
+                dict(btc_total=0,
+                     amount_total=0,
+                     amount_sold=0,
+                     obj=chain_payout)
+            )
+
+        for credit in self.credits:
+            if not credit.sharechain_id:
+                continue
+            chain = chain_data[credit.sharechain_id]
+            chain['amount_total'] += credit.amount
+
+            if credit.type == 1 and credit.sell_amount > 0:
+                chain['amount_sold'] += credit.amount
+                chain['btc_total'] += credit.sell_amount
+            elif credit.type == 1:
+                uncacheable = True
+
+        # We're gonna need to be pretty precise here
+        with decimal.localcontext(decimal.BasicContext) as ctx:
+            ctx.rounding = decimal.ROUND_DOWN
+            ctx.prec = 100
+            for chain_id, data in chain_data.iteritems():
+                # determine what percent was sold
+                sold_perc = data['amount_sold'] / data['amount_total']
+
+                # Determine shares that accounted for that sale quantity
+                data['sold_shares'] = data.pop('obj').chain_shares * sold_perc
+
+        if not uncacheable:
+            cache.cache._client.set(
+                "chain_profitability_{}".format(self.hash),
+                cPickle.dumps(chain_data))
+        return chain_data
 
 
 class Transaction(base):
