@@ -110,7 +110,7 @@ msgstr "矿工"
 
 #: templates/base.html:89
 msgid "Language"
-msgstr ""
+msgstr "语言"
 
 #: templates/base.html:140
 msgid "Donate:"
@@ -181,14 +181,12 @@ msgid "Round Duration"
 msgstr "出块周期"
 
 #: templates/block_details.html:71
-#, fuzzy
 msgid "Hashes required"
-msgstr "需要的份额"
+msgstr "需要的算力"
 
 #: templates/block_details.html:75
-#, fuzzy
 msgid "Average hashrate"
-msgstr "矿工算力"
+msgstr "平均算力"
 
 #: templates/block_details.html:79
 msgid "Shares required"
@@ -199,9 +197,8 @@ msgid "Luck"
 msgstr "幸运"
 
 #: templates/block_details.html:89
-#, fuzzy
 msgid "Chain Distribution"
-msgstr "受益分配"
+msgstr "链分配"
 
 #: templates/block_details.html:106
 msgid "No block by that identifier could be found in our database!"
@@ -224,25 +221,24 @@ msgid "Solved by"
 msgstr "挖到块的矿工"
 
 #: templates/blocks.html:9
-#, fuzzy
 msgid "Block Stats"
-msgstr "块"
+msgstr "块状态"
 
 #: templates/blocks.html:14
 msgid "Time Period"
-msgstr ""
+msgstr "期间"
 
 #: templates/blocks.html:15
 msgid "Orphan Percentage"
-msgstr ""
+msgstr "孤立块"
 
 #: templates/blocks.html:16
 msgid "Low Diff Eff"
-msgstr ""
+msgstr "有效难度"
 
 #: templates/blocks.html:17
 msgid "Dup Eff"
-msgstr ""
+msgstr "有效提交"
 
 #: templates/configuration_guide.html:13
 msgid "Step 1. Pick the region nearest to you"
@@ -287,7 +283,7 @@ msgstr "费率"
 
 #: templates/configuration_guide.html:68
 msgid "Past 4d Profit:"
-msgstr ""
+msgstr "过去4天收益："
 
 #: templates/configuration_guide.html:68
 msgid "BTC/MH"
@@ -353,13 +349,12 @@ msgid "Alphanumeric characters only"
 msgstr "只能填数字和字母"
 
 #: templates/configuration_guide.html:135
-#, fuzzy
 msgid "Starting difficulty:"
-msgstr "难度："
+msgstr "开始难度："
 
 #: templates/configuration_guide.html:138
 msgid "Optional. Specifies a starting difficulty"
-msgstr ""
+msgstr "可选。指定一个开始难度"
 
 #: templates/configuration_guide.html:145
 msgid "Step 5. Configure your miner"
@@ -829,7 +824,7 @@ msgstr "发送"
 
 #: templates/transaction_details.html:22
 msgid "Hash"
-msgstr ""
+msgstr "哈希"
 
 #: templates/user_settings.html:11
 msgid "Edit Settings for account"
@@ -1270,10 +1265,4 @@ msgstr "最近为支付的信用"
 #: templates/user_stats.html:288
 msgid "View all recent credits"
 msgstr "查看最近所有的信用"
-
-#~ msgid ""
-#~ msgstr "请谨慎填写该值，必须是2的幂"
-
-#~ msgid "Past 24h Profit:"
-#~ msgstr ""
 
