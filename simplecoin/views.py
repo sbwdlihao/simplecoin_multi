@@ -1,5 +1,7 @@
 from __future__ import division
+from decimal import Decimal
 import yaml
+import datetime
 
 from flask import (current_app, request, render_template, Blueprint, jsonify,
                    g, session, Response, abort)
@@ -10,8 +12,9 @@ from .models import (Block, ShareSlice, UserSettings, make_upper_lower, Credit,
 from . import db, root, cache, currencies, algos, locations, babel
 from .exceptions import InvalidAddressException
 from .utils import (verify_message, collect_user_stats, get_pool_hashrate,
-                    get_alerts, resort_recent_visit, collect_acct_items,
-                    CommandException, anon_users, collect_pool_stats)
+                    get_alerts, resort_recent_visit, CommandException,
+                    anon_users, collect_pool_stats, get_past_chain_profit,
+                    orphan_percentage, pool_share_tracker)
 
 
 main = Blueprint('main', __name__)
@@ -20,17 +23,22 @@ main = Blueprint('main', __name__)
 @main.route("/")
 def home():
     payout_currencies = currencies.buyable_currencies
+    past_chain_profit = get_past_chain_profit()
     return render_template('home.html',
                            payout_currencies=payout_currencies,
+                           past_chain_profit=past_chain_profit,
                            locations=locations)
 
 
 @main.route("/configuration_guide")
 def configuration_guide():
     payout_currencies = currencies.buyable_currencies
+    past_chain_profit = get_past_chain_profit()
+
     return render_template('config_guide_wrapper.html',
                            payout_currencies=payout_currencies,
-                           locations=locations)
+                           locations=locations,
+                           past_chain_profit=past_chain_profit)
 
 
 @main.route("/faq")
@@ -56,11 +64,32 @@ def blocks(q=None, currency=None):
     blocks = Block.query.order_by(Block.found_at.desc())
     if q is not None:
         blocks = blocks.filter(q)
-    if currency:
-        blocks = blocks.filter_by(currency=currency)
 
-    blocks = blocks.offset(offset).limit(100)
-    return render_template('blocks.html', blocks=blocks, page=page)
+    currency_data = None
+    try:
+        algo = currencies[currency].algo
+    except KeyError:
+        algo = None
+    if currency and algo is not None:
+        currency_data = {}
+        for i in [1, 7, 30]:
+            td = datetime.timedelta(days=i)
+            orphan_perc = orphan_percentage(currency, timedelta=td)
+            share_tracker = pool_share_tracker(
+                algo.key,
+                user=("pool_currency", ),
+                worker=(currency, ),
+                timedelta=td)
+            currency_data['{} days'.format(i)] = [orphan_perc, share_tracker]
+        blocks = blocks.filter_by(currency=currency)
+    elif currency:
+        blocks = []
+
+    if blocks:
+        blocks = blocks.offset(offset).limit(100)
+    return render_template('blocks.html', blocks=blocks, page=page,
+                           currency=currency,
+                           currency_data=currency_data)
 
 
 @main.route("/networks")
@@ -155,6 +184,7 @@ def add_pool_stats():
     g.miner_count = cache.get('total_miners') or {}
     g.alerts = get_alerts()
     g.anon_users = anon_users()
+    session.permanent = True
 
 
 @main.route("/close/<int:id>")

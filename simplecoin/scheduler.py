@@ -13,7 +13,8 @@ import bz2
 
 from simplecoin import (db, cache, redis_conn, create_app, currencies,
                         powerpools, algos, global_config, chains)
-from simplecoin.utils import last_block_time, anon_users, time_format
+from simplecoin.utils import last_block_time, anon_users, time_format, \
+    get_past_chain_profit
 from simplecoin.exceptions import RemoteException, InvalidAddressException
 from simplecoin.models import (Block, Credit, UserSettings, TradeRequest,
                                CreditExchange, Payout, ShareSlice, ChainPayout,
@@ -65,6 +66,69 @@ def crontab(func, *args, **kwargs):
 @SchedulerCommand.command
 def cleanup():
     pass
+
+
+@crontab
+@SchedulerCommand.command
+def cache_profitability():
+    """
+    Calculates the profitability from recent blocks
+    """
+    # track chain profits
+    chain_profit = {}
+
+    start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=96)
+
+    query_currencies = [c.key for c in currencies.itervalues() if c.mineable and c.sellable]
+    blocks = (Block.query.filter(Block.found_at > start_time).
+              filter(Block.currency.in_(query_currencies)))
+
+    for block in blocks:
+        chain_data = block.chain_profitability()
+        current_app.logger.info("Get {} from {}".format(chain_data, block))
+
+        for chainid, data in chain_data.iteritems():
+
+            if chainid not in chains:
+                current_app.logger.warn(
+                    "Chain #{} not configured properly! Skipping it..."
+                    .format(chainid))
+                continue
+
+            # Set the block for convenience later
+            data['block'] = block
+            chain_profit.setdefault(chainid, {})
+            chain_profit[chainid].setdefault(block.currency_obj, []).append(data)
+
+    for chainid, chain_currencies in chain_profit.iteritems():
+        merged_shares = 0
+        main_shares = 0
+        merged_currencies = 0
+        btc_total = 0
+        for currency, entries in chain_currencies.iteritems():
+            if currency.merged:
+                merged_currencies += 1
+            for data in entries:
+                btc_total += data['btc_total']
+                if currency.merged:
+                    merged_shares += data['sold_shares']
+                else:
+                    main_shares += data['sold_shares']
+
+        hps = chains[chainid].algo.hashes_per_share
+        if main_shares != 0:
+            btc_per = btc_total / (main_shares * hps)
+        elif merged_shares != 0:
+            btc_per = btc_total / (merged_shares * hps / merged_currencies)
+        else:
+            btc_per = 0
+        btc_per *= 86400  # per day
+
+        current_app.logger.debug("Caching chain #{} with profit {}"
+                                 .format(chainid, btc_per))
+
+        cache.set('chain_{}_profitability'.format(chainid),
+                  btc_per, timeout=3600 * 2)
 
 
 @crontab
@@ -297,7 +361,7 @@ def update_network():
             continue
 
         try:
-            gbt = currency.coinserv.getblocktemplate()
+            gbt = currency.coinserv.getblocktemplate({})
         except (urllib3.exceptions.HTTPError, CoinRPCException) as e:
             current_app.logger.error("Unable to communicate with {} RPC server: {}"
                                      .format(currency, e))
@@ -447,6 +511,9 @@ def _distributor(amount, splits, scale=None, addtl_prec=0):
     distribution of amount remainders among keys. Usually not needed.  """
     scale = int(scale or 28) * -1
     amount = Decimal(amount)
+
+    if not splits:
+        raise Exception("Splits cannot be empty!")
 
     with decimal.localcontext(decimal.BasicContext) as ctx:
         ctx.rounding = decimal.ROUND_DOWN
@@ -1032,6 +1099,7 @@ def server_status():
     status information.
     """
     # Reset the hashrate for each currency
+    past_chain_profit = get_past_chain_profit()
     currency_hashrates = {}
     algo_miners = {}
     servers = {}
@@ -1048,7 +1116,8 @@ def server_status():
             servers[powerpool.key] = dict(workers=data['client_count_authed'],
                                           miners=data['address_count'],
                                           hashrate=data['hps'],
-                                          name=powerpool.stratum_address)
+                                          name=powerpool.stratum_address,
+                                          profit_4d=past_chain_profit[powerpool.chain.id])
             algo_miners.setdefault(powerpool.chain.algo.key, 0)
             algo_miners[powerpool.chain.algo.key] += data['address_count']
 

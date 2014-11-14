@@ -40,6 +40,11 @@ class ConfigObject(dict):
     def __repr__(self):
         return "<{} {}>".format(self.__class__.__name__, self.key)
 
+    def __nonzero__(self):
+        return True
+
+    __bool__ = __nonzero__
+
     def __gt__(self, other):
         if type(other) != type(self):
             return False
@@ -174,6 +179,7 @@ class Currency(ConfigObject):
                 'block_time', 'block_mature_confirms']
     defaults = dict(sellable=False,
                     buyable=False,
+                    merged=False,
                     minimum_payout='0.00000001',
                     coinserv={},
                     pool_payout_addr=None)
@@ -197,6 +203,7 @@ class Currency(ConfigObject):
 
         self.sellable = bool(self.sellable)
         self.buyable = bool(self.buyable)
+        self.merged = bool(self.merged)
         self.minimum_payout = dec(self.minimum_payout)
 
         # If a pool payout addr is specified, make sure it matches the
