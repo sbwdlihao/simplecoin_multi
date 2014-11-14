@@ -43,6 +43,7 @@ display = true
 buyable = false
 sellable = false
 mineable = false
+displayable = true
 merged = false
 trans_confirmations = 6
 block_mature_confirms = 120

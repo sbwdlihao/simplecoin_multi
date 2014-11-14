@@ -180,6 +180,7 @@ class Currency(ConfigObject):
     defaults = dict(sellable=False,
                     buyable=False,
                     merged=False,
+                    displayable=True,
                     minimum_payout='0.00000001',
                     coinserv={},
                     pool_payout_addr=None)
@@ -204,6 +205,7 @@ class Currency(ConfigObject):
         self.sellable = bool(self.sellable)
         self.buyable = bool(self.buyable)
         self.merged = bool(self.merged)
+        self.displayable = bool(self.displayable)
         self.minimum_payout = dec(self.minimum_payout)
 
         # If a pool payout addr is specified, make sure it matches the

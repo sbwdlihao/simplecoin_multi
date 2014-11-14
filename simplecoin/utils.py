@@ -182,7 +182,7 @@ def collect_pool_stats():
     """
     network_data = {}
     for currency in currencies.itervalues():
-        if not currency.mineable:
+        if not currency.mineable or not currency.displayable:
             continue
 
         # Set currency defaults
