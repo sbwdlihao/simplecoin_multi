@@ -198,6 +198,7 @@ block_time = 60
 [currencies.ZVTC]
 name = "ZeroVertcoin"
 algo = "scryptn"
+merged = true
 address_version = [82]
 block_time = 150
 
@@ -226,11 +227,11 @@ algo = "scrypt"
 address_version = [23]
 block_time = 300
 
-#[currencies.TAG]
-#name = "Tagcoin"
-#algo = "scrypt"
-#address_version = [65]
-#block_time = 240
+[currencies.TAG]
+name = "Tagcoin"
+algo = "scrypt"
+address_version = [65]
+block_time = 240
 
 [algos.x11]
 hashes_per_share = 4294967296
