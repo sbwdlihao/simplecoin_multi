@@ -59,15 +59,15 @@ msgstr "邮件"
 
 #: simplecoin/tr_config.py:13
 msgid "IRC"
-msgstr ""
+msgstr "IRC"
 
 #: simplecoin/tr_config.py:14
 msgid "Reddit"
-msgstr ""
+msgstr "Reddit"
 
 #: simplecoin/tr_config.py:15
 msgid "Github"
-msgstr ""
+msgstr "Github"
 
 #: templates/500.html:3
 msgid "Internal Server Error - Pool is out of water"
@@ -170,7 +170,7 @@ msgstr "挖矿详情"
 
 #: templates/block_details.html:54
 msgid "Simplecoin ID"
-msgstr ""
+msgstr "Simplecoin ID"
 
 #: templates/block_details.html:58
 msgid "Solved by user"
@@ -222,7 +222,7 @@ msgstr "挖到块的矿工"
 
 #: templates/block_table.html:87
 msgid "No blocks matching that criteria"
-msgstr ""
+msgstr "块都不符合标准"
 
 #: templates/blocks.html:9
 msgid "Block Stats"
@@ -250,7 +250,7 @@ msgstr "第一步 选择最近的服务器"
 
 #: templates/configuration_guide.html:24
 msgid "URL"
-msgstr ""
+msgstr "URL"
 
 #: templates/configuration_guide.html:33
 msgid "Step 2. Pick a port"
@@ -291,7 +291,7 @@ msgstr "过去4天收益："
 
 #: templates/configuration_guide.html:68 templates/pool_stats.html:64
 msgid "BTC/MH"
-msgstr ""
+msgstr "BTC/MH"
 
 #: templates/configuration_guide.html:83
 msgid "Step 3. Set a username"
@@ -366,7 +366,7 @@ msgstr "第五步 配置矿工"
 
 #: templates/configuration_guide.html:150
 msgid "URL:"
-msgstr ""
+msgstr "URL:"
 
 #: templates/configuration_guide.html:150
 #: templates/configuration_guide.html:155
@@ -443,7 +443,7 @@ msgstr "设置隐私（在排行榜匿名显示账户地址）"
 
 #: templates/credit_table.html:21
 msgid "ID"
-msgstr ""
+msgstr "ID"
 
 #: templates/credit_table.html:22 templates/payout_table.html:20
 msgid "Time"
@@ -623,7 +623,7 @@ msgstr "跟踪GPU温度和实际的算力请使用"
 
 #: templates/home.html:97
 msgid "Powerpool Agent"
-msgstr ""
+msgstr "Powerpool代理"
 
 #: templates/home.html:102
 msgid "View the full configuration guide"
@@ -772,7 +772,7 @@ msgstr "链"
 
 #: templates/pool_stats.html:42
 msgid "Currently Mining"
-msgstr ""
+msgstr "当前正在挖的"
 
 #: templates/pool_stats.html:43
 msgid "Hashrate (last minute)"
@@ -788,7 +788,7 @@ msgstr "最近挖到的块"
 
 #: templates/pool_stats.html:87
 msgid "Hide merge mined currencies"
-msgstr ""
+msgstr "隐藏合并挖矿"
 
 #: templates/pool_stats.html:93
 msgid "All Algos"
@@ -1199,15 +1199,15 @@ msgstr "详情"
 
 #: templates/user_stats.html:178
 msgid "GPU"
-msgstr ""
+msgstr "GPU"
 
 #: templates/user_stats.html:179
 msgid "KHash/sec"
-msgstr ""
+msgstr "KHash/sec"
 
 #: templates/user_stats.html:180
 msgid "WUE"
-msgstr ""
+msgstr "WUE"
 
 #: templates/user_stats.html:181
 #, python-format
