@@ -48,7 +48,8 @@ class ShareTracker(object):
 
     @property
     def rejected(self):
-        return sum([self.types['dup'].shares, self.types['low'].shares, self.types['stale'].shares])
+        #return sum([self.types['dup'].shares, self.types['low'].shares, self.types['stale'].shares])
+        return self.types['stale'].shares
 
     @property
     def stale_efficiency(self):
@@ -188,6 +189,7 @@ def collect_pool_stats():
         # Set currency defaults
         currency_data = dict(code=currency.key,
                              name=currency.name,
+                             merged=currency.merged,
                              difficulty=None,
                              hashrate=0,
                              height=None,
@@ -284,7 +286,8 @@ def collect_pool_stats():
                  hashrate=0,
                  workers=0,
                  miners=0,
-                 profit_4d=past_chain_profit[powerpool.chain.id])
+                 profit_4d=past_chain_profit[powerpool.chain.id],
+                 currently_mining="???")
 
     server_status = cache.get('server_status') or server_status_defaults
 

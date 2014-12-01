@@ -73,20 +73,26 @@ def list_donation_perc():
                      .format(k * 100, v) for k, v in sorted(summ.items())])
 
 
+@manager.option("--currency", type=str, dest="currency", default=None)
 @manager.option('stop_id', type=int)
 @manager.option('start_id', type=int)
-def del_payouts(start_id, stop_id):
+def del_payouts(start_id, stop_id, currency=None):
     """
     Deletes payouts between start and stop id and removes their id from the
     associated Credits.
 
     Expects a start and stop payout id for payouts to be deleted
 
+    If currency is passed, only payout matching that currency will be removed
+
     ::Warning:: This can really fuck things up!
     """
     from simplecoin.models import Payout
     payouts = Payout.query.filter(Payout.id >= start_id,
-                                              Payout.id <= stop_id).all()
+                                  Payout.id <= stop_id).all()
+
+    if currency is not None:
+        payouts = [payout for payout in payouts if payout.currency == currency]
 
     pids = [payout.id for payout in payouts]
 
@@ -94,6 +100,9 @@ def del_payouts(start_id, stop_id):
 
     for credit in credits:
         credit.payout = None
+
+        if credit.block and credit.block.orphan:
+            credit.payable = False
 
     db.session.flush()
 
@@ -244,48 +253,6 @@ def confirm_trans(transaction_id):
     trans = Transaction.query.filter_by(txid=transaction_id).first()
     trans.confirmed = True
     db.session.commit()
-
-
-@manager.option('simulate', help="When set to one, just print what would be deleted.")
-@manager.option('oldest_kept', help="The oldest block hash that you want to save shares for")
-@manager.option('chain', type=int, help="The chain on which to cleanup old shares")
-@manager.option('-e', '--empty', type=int, default=20,
-                help="Number of empty rows enountered before exiting")
-def cleanup(chain, oldest_kept, simulate, empty):
-    """ Given the oldest block hash that you desire to hold shares for, delete
-    everything older than it. """
-    for cp in Block.query.filter_by(hash=oldest_kept).one().chain_payouts:
-        if cp.chainid == chain:
-            oldest_kept = cp.solve_slice
-            break
-
-    current_app.logger.info(
-        "Current slice index {}".format(redis_conn.get("chain_{}_slice_index"
-                                                       .format(chain))))
-    current_app.logger.info(
-        "Looking at all slices older than {}".format(oldest_kept))
-
-    simulate = bool(int(simulate))
-    if not simulate:
-        if raw_input("Are you sure you want to continue? [y/n]") != "y":
-            return
-
-    empty_found = 0
-    for i in xrange(oldest_kept, 0, -1):
-        if empty_found >= empty:
-            current_app.logger.info("20 empty in a row, exiting")
-            break
-        key = "chain_{}_slice_{}".format(chain, i)
-        if redis_conn.type(key) == 'none':
-            empty_found += 1
-        else:
-            empty_found = 0
-
-        if not simulate:
-            current_app.logger.info("deleting {}!".format(key))
-            current_app.logger.info(redis_conn.delete(key))
-        else:
-            current_app.logger.info("would delete {}".format(key))
 
 
 def make_context():

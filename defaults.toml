@@ -36,6 +36,10 @@ type = "redis"
 [redis_conn]
 type = "redis"
 
+[chains.default]
+currencies = []
+safety_margin = 2
+
 [mining_servers.default]
 display = true
 
@@ -197,6 +201,7 @@ block_time = 60
 [currencies.ZVTC]
 name = "ZeroVertcoin"
 algo = "scryptn"
+merged = true
 address_version = [82]
 block_time = 150
 
@@ -217,14 +222,120 @@ name = "Auroracoin"
 algo = "scrypt"
 address_version = [23]
 block_time = 300
+block_mature_confirms = 100
 
-#[currencies.TAG]
-#name = "Tagcoin"
-#algo = "scrypt"
-#address_version = [65]
-#block_time = 240
+[currencies.TAG]
+name = "Tagcoin"
+algo = "scrypt"
+address_version = [65]
+block_time = 240
 
+[currencies.EXCL]
+name = "Exclusivecoin"
+algo = "x11"
+address_version = [33]
+block_time = 40
 
+[currencies.CKC]
+name = "Checkcoin"
+algo = "x11"
+address_version = [28]
+block_time = 150
+
+# Tasks
+# =========================================
+# All "task" entries configure when functions in scheduler.py get run.
+# Description of the tasks purpose can be found in scheduler.py Time periods
+# that are not defined are implied to be "*". So omitting "minute" will run the
+# task every minute.
+[[tasks]]
+name = "compress_slices"
+enabled = true
+minute = "0,15,30,45"
+second = 35
+
+[[tasks]]
+name = "generate_credits"
+enabled = true
+second = 55
+
+[[tasks]]
+name = "create_trade_req"
+enabled = true
+args = ["sell"]
+minute = 1
+hour = "*/4"
+
+[[tasks]]
+name = "create_trade_req"
+enabled = true
+args = ["buy"]
+minute = 2
+hour = "*/6"
+
+[[tasks]]
+name = "collect_minutes"
+enabled = true
+second = 35
+
+[[tasks]]
+name = "collect_ppagent_data"
+enabled = true
+second = 40
+
+[[tasks]]
+name = "compress_minute"
+enabled = true
+minute = "*/5"
+second = 20
+
+[[tasks]]
+name = "compress_five_minute"
+enabled = true
+minute = 2
+second = 2
+
+[[tasks]]
+name = "update_block_state"
+enabled = true
+minute = "*/2"
+
+[[tasks]]
+name = "update_online_workers"
+enabled = true
+minute = "*/5"
+second = 30
+
+[[tasks]]
+name = "cache_user_donation"
+enabled = true
+minute = "*/15"
+second = 15
+
+[[tasks]]
+name = "update_network"
+enabled = true
+second = 20
+
+[[tasks]]
+name = "server_status"
+enabled = true
+second = 15
+
+[[tasks]]
+name = "leaderboard"
+enabled = true
+minute = "*/5"
+second = 40
+
+[[tasks]]
+name = "cache_profitability"
+enabled = true
+second = 0
+minute = 8
+
+# Algorithms
+# =========================================
 [algos.x11]
 hashes_per_share = 4294967296
 normalize_mult = 0.181818182

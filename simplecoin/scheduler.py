@@ -63,9 +63,117 @@ def crontab(func, *args, **kwargs):
 
 
 @crontab
-@SchedulerCommand.command
-def cleanup():
-    pass
+@SchedulerCommand.option('-ds', '--dont-simulate', default=False, action="store_true")
+def share_cleanup(dont_simulate=True):
+    """ Runs chain_cleanup on each chain. """
+    for chain in chains.itervalues():
+        try:
+            chain_cleanup(chain, dont_simulate)
+        except Exception:
+            current_app.logger.exception(
+                "Unhandled exception cleaning up chain {}".format(chain.id))
+
+
+def chain_cleanup(chain, dont_simulate):
+    """ Handles removing all redis share slices that we are fairly certain won't
+    be needed to credit a block if one were to be solved in the future. """
+    if not chain.currencies:
+        current_app.logger.warn(
+            "Unable to run share slice cleanup on chain {} since currencies "
+            "aren't specified!".format(chain.id))
+        return
+
+    # Get the current sharechain index from redis
+    current_index = int(redis_conn.get("chain_{}_slice_index".format(chain.id)) or 0)
+    if not current_index:
+        current_app.logger.warn(
+            "Index couldn't be determined for chain {}".format(chain.id))
+        return
+
+    # Find the maximum average difficulty of all currencies on this sharechain
+    max_diff = 0
+    max_diff_currency = None
+    for currency in chain.currencies:
+        currency_data = cache.get("{}_data".format(currency.key))
+        if not currency_data or currency_data['difficulty_avg_stale']:
+            current_app.logger.warn(
+                "Cache doesn't accurate enough average diff for {} to cleanup chain {}"
+                .format(currency, chain.id))
+            return
+
+        if currency_data['difficulty_avg'] > max_diff:
+            max_diff = currency_data['difficulty_avg']
+            max_diff_currency = currency
+
+    assert max_diff != 0
+
+    hashes_to_solve = max_diff * (2 ** 32)
+    shares_to_solve = hashes_to_solve / chain.algo.hashes_per_share
+    shares_to_keep = shares_to_solve * chain.safety_margin
+    if chain.type == "pplns":
+        shares_to_keep *= chain.last_n
+    current_app.logger.info(
+        "Keeping {:,} shares based on max diff {} for {} on chain {}"
+        .format(shares_to_keep, max_diff, max_diff_currency, chain.id))
+
+    # Delete any shares past shares_to_keep
+    found_shares = 0
+    empty_slices = 0
+    iterations = 0
+    for index in xrange(current_index, -1, -1):
+        iterations += 1
+        slc_key = "chain_{}_slice_{}".format(chain.id, index)
+        key_type = redis_conn.type(slc_key)
+
+        # Fetch slice information
+        if key_type == "list":
+            empty_slices = 0
+            # For speed sake, ignore uncompressed slices
+            continue
+        elif key_type == "hash":
+            empty_slices = 0
+            found_shares += float(redis_conn.hget(slc_key, "total_shares"))
+        elif key_type == "none":
+            empty_slices += 1
+        else:
+            raise Exception("Unexpected slice key type {}".format(key_type))
+
+        if found_shares >= shares_to_keep or empty_slices >= 20:
+            break
+
+    if found_shares < shares_to_keep:
+        current_app.logger.info(
+            "Not enough shares {:,}/{:,} for cleanup on chain {}"
+            .format(found_shares, shares_to_keep, chain.id))
+        return
+
+    current_app.logger.info("Found {:,} shares after {:,} iterations"
+                            .format(found_shares, iterations))
+
+    # Delete all share slices older than the last index found
+    oldest_kept = index - 1
+    empty_found = 0
+    deleted_count = 0
+    for index in xrange(oldest_kept, -1, -1):
+        if empty_found >= 20:
+            current_app.logger.debug("20 empty in a row, exiting")
+            break
+        key = "chain_{}_slice_{}".format(chain, index)
+        if redis_conn.type(key) == "none":
+            empty_found += 1
+        else:
+            empty_found = 0
+
+            if dont_simulate:
+                if redis_conn.delete(key):
+                    deleted_count += 1
+            else:
+                current_app.logger.info("Would delete {}".format(key))
+
+    if dont_simulate:
+        current_app.logger.info(
+            "Deleted {} total share slices from #{:,}->{:,}"
+            .format(deleted_count, oldest_kept, index))
 
 
 @crontab
@@ -190,6 +298,13 @@ def create_payouts():
 
     q = Credit.query.filter_by(payable=True, payout_id=None).all()
     for credit in q:
+
+        if credit.block and credit.block.orphan:
+            current_app.logger.error(
+                "Credit {} was marked as both payable, but it's block was "
+                "marked orphaned! Aborting...".format(credit.id))
+            return
+
         key = (credit.currency, credit.user, credit.address)
         lst = grouped_credits.setdefault(key, [])
         lst.append(credit)
@@ -393,15 +508,20 @@ def update_network():
                   dict(height=gbt['height'],
                        difficulty=difficulty,
                        reward=gbt['coinbasevalue'] * current_app.SATOSHI,
-                       difficulty_avg=difficulty_avg),
+                       difficulty_avg=difficulty_avg,
+                       difficulty_avg_stale=len(diff_list) < keep_count),
                   timeout=1200)
 
 
 @crontab
-@SchedulerCommand.command
-def update_block_state():
+@SchedulerCommand.option("-b", "--block-id", type=int, dest="block_id")
+def update_block_state(block_id=None):
     """
-    Loops through all immature and non-orphaned blocks.
+    Loops through blocks (default immature and non-orphaned blocks)
+
+    If `block_id` is passed, instead of the checking the default blocks,
+    all blocks of the same currency of a >= id will be updated.
+
     First checks to see if blocks are orphaned,
     then it checks to see if they are now matured.
     """
@@ -418,9 +538,15 @@ def update_block_state():
                 return None
         return heights[currency.key]
 
-    # Select all immature & non-orphaned blocks
-    immature = Block.query.filter_by(mature=False, orphan=False)
-    for block in immature:
+    # Select immature & non-orphaned blocks if none are passed
+    if block_id is None:
+        blocks = Block.query.filter_by(mature=False, orphan=False).all()
+    else:
+        block = Block.query.filter_by(id=block_id).one()
+        blocks = (Block.query.filter_by(currency=block.currency)
+                             .filter(Block.id >= block_id).all())
+
+    for block in blocks:
         try:
             currency = currencies[block.currency]
         except KeyError:
@@ -428,6 +554,7 @@ def update_block_state():
                 "Unable to process block {}, no currency configuration."
                 .format(block))
             continue
+
         blockheight = get_blockheight(currency)
 
         if not blockheight:
@@ -446,31 +573,37 @@ def update_block_state():
         try:
             # Check to see if the block hash exists in the block chain
             output = currency.coinserv.getblock(block.hash)
-            current_app.logger.debug("Confirms: {}; Height diff: {}"
-                                     .format(output['confirmations'],
-                                             blockheight - block.height))
+            current_app.logger.debug(
+                "Confirms: {}; Height diff: {}"
+                .format(output['confirmations'], blockheight - block.height))
         except urllib3.exceptions.HTTPError as e:
-            current_app.logger.error("Unable to communicate with {} RPC server: {}"
-                                     .format(currency.key, e))
+            current_app.logger.error("Unable to communicate with {} RPC server:"
+                                     " {}".format(currency.key, e))
             continue
         except CoinRPCException:
-            current_app.logger.info("Block {} not in coin database, assume orphan!"
-                                    .format(block))
+            current_app.logger.info(
+                "Block {} not in coin database, assume orphan!".format(block))
             block.orphan = True
+            for credit in block.credits:
+                credit.payable = False
         else:
             # if the block has the proper number of confirms
-            if output['confirmations'] > currency.block_mature_confirms:
-                current_app.logger.info("Block {} meets {} confirms, mark mature"
-                                        .format(block, currency.block_mature_confirms))
+            if output['confirmations'] >= currency.block_mature_confirms:
+                current_app.logger.info(
+                    "Block {} meets {} confirms, mark mature"
+                    .format(block, currency.block_mature_confirms))
                 block.mature = True
                 for credit in block.credits:
                     if credit.type == 0:
                         credit.payable = True
             # else if the result shows insufficient confirms, mark orphan
             elif output['confirmations'] < currency.block_mature_confirms:
-                current_app.logger.info("Block {} occured {} height ago, but not enough confirms. Marking orphan."
-                                        .format(block, currency.block_mature_confirms))
+                current_app.logger.info(
+                    "Block {} occured {} height ago, but not enough confirms. "
+                    "Marking orphan.".format(block, currency.block_mature_confirms))
                 block.orphan = True
+                for credit in block.credits:
+                    credit.payable = False
 
         db.session.commit()
 
@@ -484,13 +617,16 @@ def generate_credits(dont_simulate=True):
     unproc_blocks = redis_conn.keys("unproc_block*")
     for key in unproc_blocks:
         hash = key[13:]
-        current_app.logger.info("==== Attempting to process block hash {}".format(hash))
+        current_app.logger.info("==== Attempting to process block hash {}"
+                                .format(hash))
         try:
             credit_block(key, simulate=simulate)
         except Exception:
             db.session.rollback()
-            current_app.logger.error("Unable to payout block {}".format(hash), exc_info=True)
-        current_app.logger.info("==== Done processing block hash {}".format(hash))
+            current_app.logger.error("Unable to payout block {}".format(hash),
+                                     exc_info=True)
+        current_app.logger.info("==== Done processing block hash {}"
+                                .format(hash))
 
 
 def distributor(*args, **kwargs):
@@ -581,7 +717,8 @@ def credit_block(redis_key, simulate=False):
     if simulate is not True:
         simulate = False
     if simulate:
-        current_app.logger.warn("Running in simulate mode, no commit will be performed")
+        current_app.logger.warn(
+            "Running in simulate mode, no DB commit will be performed")
         current_app.logger.setLevel(logging.DEBUG)
 
     data = redis_conn.hgetall(redis_key)
@@ -590,7 +727,8 @@ def credit_block(redis_key, simulate=False):
     # If start_time isn't listed explicitly do our best to derive from
     # statistical share records
     if 'start_time' in data:
-        time_started = datetime.datetime.utcfromtimestamp(float(data.get('start_time')))
+        time_started = datetime.datetime.utcfromtimestamp(
+            float(data.get('start_time')))
     else:
         time_started = last_block_time(data['algo'], merged=merged)
 
@@ -807,12 +945,17 @@ def credit_block(redis_key, simulate=False):
             amount=+donations_collected)
         db.session.add(p)
 
-    current_app.logger.info("Collected {} in donation".format(donations_collected))
-    current_app.logger.info("Collected {} from fees".format(fees_collected))
-    current_app.logger.info("Net swing from block {}"
-                            .format(fees_collected + donations_collected))
+    current_app.logger.info("Collected {} {} in donation"
+                            .format(donations_collected, block.currency))
+    current_app.logger.info("Collected {} {} from fees"
+                            .format(fees_collected, block.currency))
+    current_app.logger.info(
+        "Net swing from block {} {}"
+        .format(fees_collected + donations_collected, block.currency))
 
-    pool_key = (pool_payout['user'], pool_payout['address'], pool_payout['currency'])
+    pool_key = (pool_payout['user'], pool_payout['address'],
+                pool_payout['currency'])
+
     for chain in chains:
         if pool_key not in chain.credits:
             continue
@@ -1098,13 +1241,20 @@ def server_status():
     Periodically poll the backend to get number of workers and other general
     status information.
     """
-    # Reset the hashrate for each currency
     past_chain_profit = get_past_chain_profit()
     currency_hashrates = {}
     algo_miners = {}
     servers = {}
     raw_servers = {}
     for powerpool in powerpools.itervalues():
+
+        server_default = dict(workers=0,
+                              miners=0,
+                              hashrate=0,
+                              name='???',
+                              profit_4d=0,
+                              currently_mining='???')
+
         try:
             data = powerpool.request('')
         except Exception:
@@ -1113,16 +1263,21 @@ def server_status():
             continue
         else:
             raw_servers[powerpool.stratum_address] = data
-            servers[powerpool.key] = dict(workers=data['client_count_authed'],
-                                          miners=data['address_count'],
-                                          hashrate=data['hps'],
-                                          name=powerpool.stratum_address,
-                                          profit_4d=past_chain_profit[powerpool.chain.id])
+            status = {'workers': data['client_count_authed'],
+                      'miners': data['address_count'],
+                      'hashrate': data['hps'],
+                      'name': powerpool.stratum_address,
+                      'profit_4d': past_chain_profit[powerpool.chain.id]}
+
+            server_default.update(status)
+            servers[powerpool.key] = server_default
+
             algo_miners.setdefault(powerpool.chain.algo.key, 0)
             algo_miners[powerpool.chain.algo.key] += data['address_count']
 
             if 'last_flush_job' in data and 'currency' in data['last_flush_job']:
                 curr = data['last_flush_job']['currency']
+                servers[powerpool.key].update({'currently_mining': curr})
                 currency_hashrates.setdefault(currencies[curr], 0)
                 currency_hashrates[currencies[curr]] += data['hps']
                 # Add hashrate to the merged networks too
@@ -1131,7 +1286,12 @@ def server_status():
                         currency_hashrates.setdefault(currencies[currency], 0)
                         currency_hashrates[currencies[currency]] += data['hps']
 
-    for currency, hashrate in currency_hashrates.iteritems():
+    # Set hashrate to 0 if not located
+    for currency in currencies.itervalues():
+        hashrate = 0
+        if currency in currency_hashrates:
+            hashrate = currency_hashrates[currency]
+
         cache.set('hashrate_' + currency.key, hashrate, timeout=120)
 
     cache.set('raw_server_status', raw_servers, timeout=1200)
