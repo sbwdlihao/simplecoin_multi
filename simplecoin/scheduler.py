@@ -1,3 +1,5 @@
+#coding:utf-8
+
 import logging
 import itertools
 import datetime
@@ -13,10 +15,10 @@ import bz2
 
 from simplecoin import (db, cache, redis_conn, create_app, currencies,
                         powerpools, algos, global_config, chains)
-from simplecoin.utils import last_block_time, anon_users, time_format, \
+from simplecoin.utils import last_block_time, push_unicast, anon_users, time_format, \
     get_past_chain_profit
 from simplecoin.exceptions import RemoteException, InvalidAddressException
-from simplecoin.models import (Block, Credit, UserSettings, TradeRequest,
+from simplecoin.models import (Block, Credit, UserSettings, UserNotifySettings,TradeRequest,
                                CreditExchange, Payout, ShareSlice, ChainPayout,
                                DeviceSlice, AnalysisSlice, make_upper_lower)
 
@@ -1233,6 +1235,41 @@ def compress_five_minute():
     AnalysisSlice.compress(1)
     db.session.commit()
 
+@crontab
+@SchedulerCommand.command
+def low_hashrate_notify():
+    workers = {}
+    lower_10, upper_10 = make_upper_lower(offset=datetime.timedelta(minutes=2))
+    appkey = '547be686fd98c5e239000155'
+    app_master_secret = 'wpd4ascoyjnmbzjg39y7a1lxijhaxhpr'
+
+    def get_hashrate_scale(hashrate):
+        scales = {1000: "KH/s", 1000000: "MH/s", 1000000000: "GH/s"}
+        scale = 1
+        scale_label = "H/s"
+        for amnt, label in scales.iteritems():
+            if hashrate >= amnt:
+                scale = amnt
+                scale_label = label
+        return '%.2f%s' % (hashrate/scale, scale_label)
+
+    for slc in ShareSlice.get_span(ret_query=True,
+                                   upper=upper_10,
+                                   lower=lower_10,
+                                   ):
+        worker = workers.get((slc.user, slc.worker, slc.algo), ShareTracker(slc.algo))
+        worker.count_slice(slc)
+    for setting in UserNotifySettings.query.all():
+        worker = workers.get((setting.user, setting.worker, setting.algo))
+        hashrate = 0
+        if worker != None:
+            hashrate = worker.hashrate
+        if hashrate < setting.low_share:
+            device_token = setting.device_token
+            ticker = '您的算力低于设置值'
+            title = '算力报警'
+            text = '您的当前算力{}低于预设算力{}'.format(get_hashrate_scale(hashrate), get_hashrate_scale(setting.low_share))
+            push_unicast(appkey, app_master_secret, device_token, ticker, title, text)
 
 @crontab
 @SchedulerCommand.command
@@ -1310,7 +1347,6 @@ def main():
 
     app = create_app("scheduler", log_level=args.log_level)
     app.scheduler.start()
-
 
 if __name__ == "__main__":
     main()

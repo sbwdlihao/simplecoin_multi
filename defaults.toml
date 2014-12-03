@@ -269,14 +269,14 @@ second = 55
 
 [[tasks]]
 name = "create_trade_req"
-enabled = true
+enabled = false
 args = ["sell"]
 minute = 1
 hour = "*/4"
 
 [[tasks]]
 name = "create_trade_req"
-enabled = true
+enabled = false
 args = ["buy"]
 minute = 2
 hour = "*/6"
@@ -288,7 +288,7 @@ second = 35
 
 [[tasks]]
 name = "collect_ppagent_data"
-enabled = true
+enabled = false
 second = 40
 
 [[tasks]]
@@ -323,6 +323,17 @@ second = 15
 [[tasks]]
 name = "update_network"
 enabled = true
+second = 20
+
+[[tasks]]
+name = "create_payouts"
+enabled = true
+minute = 59
+
+[[tasks]]
+name = "low_hashrate_notify"
+enabled = true
+minute = "*/10"
 second = 20
 
 [[tasks]]

@@ -2,6 +2,8 @@ import datetime
 import time
 import yaml
 import json
+import hashlib
+import requests
 
 from flask import current_app, session
 from sqlalchemy.exc import SQLAlchemyError
@@ -616,6 +618,31 @@ def validate_message_vals(address, **kwargs):
     return (set_addrs, del_addrs, pdonate_perc, spayout_perc, spayout_addr,
             spayout_curr, del_spayout_addr, anon)
 
+def push_unicast(appkey, app_master_secret, device_token, ticker, title, text):
+    timestamp = int(time.time() * 1000)
+    validation_token = hashlib.md5('%s%s%s' % (appkey, app_master_secret, timestamp)).hexdigest()
+    params = {
+                'appkey': appkey,
+                'timestamp': timestamp,
+                'validation_token': validation_token,
+                'device_tokens': device_token,
+                'type': 'unicast', 
+                'payload': {
+                    'body': 
+                    {
+                        'ticker': ticker, 
+                        'title': title, 
+                        'text': text, 
+                        'after_open': 'go_app'
+                    },
+                    'display_type': 'notification'
+                }
+            }
+    ret = requests.post('http://msg.umeng.com/api/send', data=json.dumps(params))
+    if ret.status_code == 200:
+        current_app.logger.info('notify response = {}'.format(ret.json()))
+    else:
+        current_app.logger.warn('notify failed status code = {}'.format(ret.status_code))
 
 def verify_message(address, curr, message, signature):
     update_dict = {'SET_ADDR': {}, 'DEL_ADDR': [], 'MAKE_ANON': False,

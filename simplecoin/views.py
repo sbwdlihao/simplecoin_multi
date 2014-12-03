@@ -7,7 +7,7 @@ from flask import (current_app, request, render_template, Blueprint, jsonify,
                    g, session, Response, abort)
 from flask.ext.babel import gettext
 
-from .models import (Block, ShareSlice, UserSettings, make_upper_lower, Credit,
+from .models import (Block, ShareSlice, UserSettings, UserNotifySettings,make_upper_lower, Credit,
                      Payout, DeviceSlice, Transaction)
 from . import db, root, cache, currencies, algos, locations, babel
 from .exceptions import InvalidAddressException
@@ -315,6 +315,52 @@ def address_stats(typ):
                    scale_label=scale_label,
                    workers=workers)
 
+@main.route("/api/notify")
+def notify():
+    typ = request.args.get("type")
+    if typ == None:
+        return jsonify(
+                result=False,
+                error_code=0
+            )
+    address = request.args.get("address")
+    worker = request.args.get("worker")
+    algo = request.args.get("algo")
+    device_token = request.args.get("device_token")
+    if address == None or worker == None or algo == None or device_token == None:
+        return jsonify(
+                result=False,
+                error_code=1
+            )
+    if typ == 'low_share':
+        scale = int(request.args.get("scale", 1000000000))
+        value = float(request.args.get("value", 0.0))
+        if value == 0.0:
+            setting = UserNotifySettings.query.filter(
+                    UserNotifySettings.user==address, 
+                    UserNotifySettings.worker==worker,
+                    UserNotifySettings.algo==algo,
+                    UserNotifySettings.device_token==device_token
+                ).first()
+            if setting != None:
+                db.session.delete(setting)
+                db.session.commit()
+            return jsonify(
+                        result=True,
+                    )
+        else:
+            value *= scale
+            setting = UserNotifySettings.create(address, worker, algo, device_token, value)
+            try:
+                db.session.commit()
+                return jsonify(
+                        result=True,
+                    )
+            except:
+                return jsonify(
+                        result=True,
+                        error_code=-1
+                    )
 
 @main.errorhandler(Exception)
 def handle_error(error):

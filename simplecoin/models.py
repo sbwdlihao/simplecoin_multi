@@ -1003,6 +1003,18 @@ class UserSettings(base):
 
         return user
 
+class UserNotifySettings(base):
+    user = db.Column(db.String, primary_key=True)
+    worker = db.Column(db.String, primary_key=True)
+    algo = db.Column(db.String, primary_key=True)
+    device_token = db.Column(db.String, primary_key=True)
+    low_share = db.Column(db.Numeric)
+
+    @classmethod
+    def create(cls, user, worker, algo, device_token, low_share):
+        setting = cls(user=user, worker=worker, algo=algo, device_token=device_token, low_share=low_share)
+        db.session.add(setting)
+        return setting
 
 class PayoutAddress(base):
     address = db.Column(db.String, primary_key=True)
