@@ -15,7 +15,7 @@ import bz2
 
 from simplecoin import (db, cache, redis_conn, create_app, currencies,
                         powerpools, algos, global_config, chains)
-from simplecoin.utils import last_block_time, push_unicast, anon_users, time_format, \
+from simplecoin.utils import last_block_time, ShareTracker, push_unicast, anon_users, time_format, \
     get_past_chain_profit
 from simplecoin.exceptions import RemoteException, InvalidAddressException
 from simplecoin.models import (Block, Credit, UserSettings, UserNotifySettings,TradeRequest,
