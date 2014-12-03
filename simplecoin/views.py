@@ -361,6 +361,11 @@ def notify():
                         result=True,
                         error_code=-1
                     )
+    else:
+        return jsonify(
+                result=False,
+                error_code=2
+            )
 
 @main.errorhandler(Exception)
 def handle_error(error):
