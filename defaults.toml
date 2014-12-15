@@ -89,6 +89,7 @@ algo = "scrypt"
 address_version = [30]
 merged = true
 block_time = 60
+block_mature_confirms = 250
 
 [currencies.SYS]
 name = "Syscoin"
