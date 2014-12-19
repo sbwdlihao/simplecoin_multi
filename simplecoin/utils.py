@@ -14,7 +14,7 @@ from decimal import Decimal as dec, Decimal
 from .exceptions import CommandException, InvalidAddressException
 from . import db, cache, root, redis_conn, currencies, powerpools, algos, chains
 from .models import (ShareSlice, Block, Credit, UserSettings, make_upper_lower,
-                     Payout)
+                     Payout, CreditExchange)
 
 
 class ShareTracker(object):
@@ -215,6 +215,7 @@ def collect_pool_stats():
 
         # Grab some blocks for this currency
         blocks = (Block.query.filter_by(currency=currency.key).
+                  options(db.joinedload('chain_payouts')).
                   order_by(Block.found_at.desc()).limit(4).all())
 
         # Update the dicts if we found any blocks
@@ -350,7 +351,6 @@ def collect_user_stats(user_address):
                                             clip=datetime.timedelta(minutes=2))
 
     newest = datetime.datetime.fromtimestamp(0)
-    # XXX: Needs to only sum the last 24 hours
     for slc in ShareSlice.get_span(ret_query=True,
                                    upper=upper_day,
                                    lower=lower_day,
@@ -434,6 +434,8 @@ def collect_user_stats(user_address):
         ready_to_send=dec(0),
         sent=dec(0),
         by_currency=None,
+        sold_btc_total=dec(0),
+        payable_total=dec(0)
     )
     currency = dict(
         immature=dec(0),
@@ -441,7 +443,7 @@ def collect_user_stats(user_address):
         sold=dec(0),
         btc_converted=dec(0),
         payable=dec(0),
-        total_pending=dec(0),
+        total_pending=dec(0)
     )
 
     def lookup_curr(curr):
@@ -455,7 +457,8 @@ def collect_user_stats(user_address):
     payouts = Payout.query.filter_by(user=user_address).order_by(Payout.created_at.desc()).limit(20)
 
     # Loop through all unaggregated credits to find the rest
-    credits = (Credit.query.filter_by(user=user_address, payout_id=None).
+    credits = (Credit.query.with_polymorphic(CreditExchange).
+               filter_by(user=user_address, payout_id=None).
                filter(Credit.block != None).
                options(db.joinedload('payout'),
                        db.joinedload('block')).
@@ -476,11 +479,13 @@ def collect_user_stats(user_address):
                 if credit.sell_amount is not None:
                     curr['sold'] += credit.amount
                     curr['btc_converted'] += credit.sell_amount
+                    summary['sold_btc_total'] += credit.sell_amount
                 else:
                     curr['unconverted'] += credit.amount
 
         if credit.payable:
             curr['payable'] += credit.payable_amount
+            summary['payable_total'] += credit.payable_amount
         if not credit.block.mature and not credit.block.orphan:
             curr['immature'] += credit.amount
         if not credit.block.orphan:
