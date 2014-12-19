@@ -228,7 +228,27 @@ def user_dashboard(user_address):
     return render_template('user_stats.html',
                            username=user_address,
                            **stats)
+@main.route("/address/<user_address>")
+def user_address(user_address):
+    # Do some checking to make sure the address is valid + payable
+    try:
+        currencies.lookup_payable_addr(user_address)
+    except Exception:
+        return render_template(
+            'invalid_address.html',
+            allowed_currencies=currencies.buyable_currencies)
 
+    stats = collect_user_stats(user_address)
+
+    # reorganize/create the recently viewed
+    recent = session.get('recent_user_counts', {})
+    recent.setdefault(user_address, 0)
+    recent[user_address] += 1
+    session['recent_user_counts'] = recent
+    resort_recent_visit(recent)
+    return render_template('address.html',
+                           username=user_address,
+                           **stats)
 
 @main.route("/<user_address>/clear")
 def address_clear(user_address=None):

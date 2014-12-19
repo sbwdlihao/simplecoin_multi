@@ -5,6 +5,7 @@ import json
 import hashlib
 import requests
 
+from datetime import timedelta
 from flask import current_app, session
 from sqlalchemy.exc import SQLAlchemyError
 from cryptokit.rpc import CoinRPCException
@@ -310,6 +311,7 @@ def collect_user_stats(user_address):
     into main user stats page """
     # store all the raw data of we're gonna grab
     workers = {}
+    user_address_algos = {}
 
     def check_new(user_address, worker, algo):
         """ Setups up an empty worker template. Since anything that has data on
@@ -318,6 +320,8 @@ def collect_user_stats(user_address):
         if key not in workers:
             workers[key] = {'total_shares': ShareTracker(algo),
                             'last_10_shares': ShareTracker(algo),
+                            'last_30_shares': ShareTracker(algo),
+                            'last_60_shares': ShareTracker(algo),
                             'online': False,
                             'servers': {},
                             'algo': algo,
@@ -325,8 +329,23 @@ def collect_user_stats(user_address):
                             'address': user_address}
         return workers[key]
 
+    def check_algo(user_address, algo):
+        key = (user_address, algo)
+        if key not in user_address_algos:
+            user_address_algos[key] = {
+                'total_shares': ShareTracker(algo),
+                'last_10_shares': ShareTracker(algo),
+                'last_30_shares': ShareTracker(algo),
+                'last_60_shares': ShareTracker(algo),
+                'algo': algo,
+                'address': user_address
+            }
+        return user_address_algos[key]
+    
     # Get the lower bound for 10 minutes ago
     lower_10, upper_10 = make_upper_lower(offset=datetime.timedelta(minutes=2))
+    lower_30, upper_30 = make_upper_lower(span=timedelta(minutes=30), offset=datetime.timedelta(minutes=2))
+    lower_60, upper_60 = make_upper_lower(span=timedelta(minutes=60), offset=datetime.timedelta(minutes=2))
     lower_day, upper_day = make_upper_lower(span=datetime.timedelta(days=1),
                                             clip=datetime.timedelta(minutes=2))
 
@@ -340,9 +359,18 @@ def collect_user_stats(user_address):
             newest = slc.time
 
         worker = check_new(slc.user, slc.worker, slc.algo)
+        algo = check_algo(slc.user, slc.algo)
         worker['total_shares'].count_slice(slc)
+        algo['total_shares'].count_slice(slc)
         if slc.time > lower_10:
             worker['last_10_shares'].count_slice(slc)
+            algo['last_10_shares'].count_slice(slc)
+        if slc.time > lower_30:
+            worker['last_30_shares'].count_slice(slc)
+            algo['last_30_shares'].count_slice(slc)
+        if slc.time > lower_60:
+            worker['last_60_shares'].count_slice(slc)
+            algo['last_60_shares'].count_slice(slc)
 
     hide_hr = newest < datetime.datetime.utcnow() - datetime.timedelta(seconds=current_app.config['worker_hashrate_fold'])
 
@@ -396,6 +424,7 @@ def collect_user_stats(user_address):
     # by the worker name, then generates a list of dictionaries using the list
     # of keys
     workers = [workers[key] for key in sorted(workers.iterkeys(), key=lambda tpl: tpl[1])]
+    user_address_algos = user_address_algos.values()
 
     settings = UserSettings.query.filter_by(user=user_address).first()
 
@@ -470,7 +499,8 @@ def collect_user_stats(user_address):
 
     f_perc = dec(current_app.config.get('fee_perc', dec('0.02'))) * 100
 
-    return dict(workers=workers,
+    return dict(user_address_algos=user_address_algos,
+                workers=workers,
                 credits=credits[:20],
                 payouts=payouts[:20],
                 settings=settings,

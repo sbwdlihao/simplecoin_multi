@@ -35,6 +35,7 @@ type = "redis"
 
 [redis_conn]
 type = "redis"
+db = 14
 
 [chains.default]
 currencies = []
@@ -89,6 +90,7 @@ algo = "scrypt"
 address_version = [30]
 merged = true
 block_time = 60
+block_mature_confirms = 250
 
 [currencies.SYS]
 name = "Syscoin"
@@ -328,7 +330,7 @@ second = 20
 [[tasks]]
 name = "create_payouts"
 enabled = true
-minute = 59
+hour = "14"
 
 [[tasks]]
 name = "low_hashrate_notify"
@@ -349,7 +351,7 @@ second = 40
 
 [[tasks]]
 name = "cache_profitability"
-enabled = true
+enabled = false
 second = 0
 minute = 8
 

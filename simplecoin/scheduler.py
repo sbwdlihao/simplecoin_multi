@@ -1096,9 +1096,9 @@ def collect_minutes():
 
         redis_conn.rename(key, "processing_analysis_shares")
         data = redis_conn.hgetall("processing_analysis_shares")
-        total = data['total']
-        theory = data['theory']
-        real = data['real']
+        total = float(data['total'])
+        theory = float(data['theory'])
+        real = float(data['real'])
         try:
             slc = AnalysisSlice(time=minute, currency=currency, algo=algo, user=address, worker=worker,
                              total=total, theory=theory, real=real, span=0)
